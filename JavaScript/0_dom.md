@@ -61,7 +61,7 @@ window.open("images/photo.jpg", "photo window", "resizable=no, width=350, height
 
 7. `RegExp.exec(str)`，**在一个指定字符串中执行一个搜索匹配**。返回一个结果数组或 [`null`]；如果匹配成功，`exec`() 方法返回一个数组，并更新正则表达式对象的属性。返回的数组将`完全匹配成功的文本`作为第一项，将`正则括号里匹配成功`的作为数组填充到后面。
 
-![1562631628687](D:\notes\JavaScript\images\1562631628687.png)
+![1562631628687](images\1562631628687.png)
 
 ```javascript
 // 这里的每一个括号，表示一个匹配模式，它对应以一个匹配结果，比如：(\S)它匹配一个非空
@@ -77,7 +77,7 @@ for (var k=0; k<nameList.length; k++) {
 }
 ```
 
-![1562554685102](D:\notes\JavaScript\images\1562554685102.png)
+![1562554685102](images\1562554685102.png)
 
 
 
