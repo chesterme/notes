@@ -91,7 +91,32 @@ B-TREE-SEARCH(x, k){
 }
 ```
 
-javascript的实现：
+javascript的递归实现：
+```javascript
+// 在b树中查找一个元素
+// subRoot表示一棵子树的根节点，key表示需要查找的元素
+BTree.prototype.search = function(subRoot, key){
+    var i = 1;
+    // 从当前结点的关键字序列中找到一个最小的i，使得subRoot.key_i >= key
+    while(i <= subRoot.keyNumber && subRoot.keyList[i] < key){
+        i++;
+    }
+    // 如果找到了，则直接返回
+    if(i <= subRoot.keyNumber && subRoot.keyList[i] == key){
+        return new PairData(subRoot, i);
+    }
+    // 如果已经来到了树叶结点，说明B树中不存在该元素
+    if(subRoot.isLeaf){
+        console.log("B树中不存在该元素:" + key)
+        return null;
+    }
+    else{
+        this.search(subRoot.pointList[i], key);
+    }
+}
+```
+
+javascript的非递归实现：
 ```javascript
 // 查找一个元素
 BTree.prototype.find = function(key){
@@ -174,10 +199,10 @@ BTree.prototype.printAll = function(key){
 B-TREE-CREATE(T):
     // 创建一个B树的空结点
     x = ALLOCATE-NODE(); 
-    // 使它成为B树的根节点
     x.isLeaf = true;
     // 初始化关键字数量为0
     x.n = 0;
+    // 使它成为B树的根节点
     T.root = x;
 ```
 
@@ -186,5 +211,192 @@ B-TREE-CREATE(T):
 ```pseudocode
 // x表示关键字序列已满的结点y的父结点，i表示父结点x中指针序列的下标，它使得x.point_i指向结点y
 B-TREE-SPLIT-CHILD(x, i):
-    
+    // 新建一个空白的结点
+    z = ALLOCATE-NODE();
+    // 使用y来表示需要分裂的结点
+    y = x.point_i;
+    // 将y结点的一半数据复制到结点z中
+    z.isLeaf = y.isLeaf;
+    // t表示最大分支数的一半
+    z.n = t - 1;
+    // 复制关键字
+    for j = 1 to t-1:
+        z.key_j = y.key_(t+j);
+    // 如果是非叶子结点，还需要复制指针域
+    if not y.isLeaf:
+        for j = 1 to t-1:
+            z.point_j = y.point_(t+j);
+    // 将新节点z插入到结点y的父结点中
+    for j = x.n + 1 downto i + 1:
+        x.point_(j + 1) = x.point_j;
+    x.point_(i + 1) = z;
+    // 将新结点z和旧结点y的中间元素放置在它们的父结点x上
+    for j = x.n downto i:
+        x.key_j = x.key_(j+1);
+    x.key_i = y.key_t;
+    // 从结点y中删除关键字key_t
+    y.key_t = null;
+    // 更新y结点的关键字数量
+    y.n = t - 1;
+    // 更新父结点x的关键字数量
+    x.n = x.n + 1;
+```
+
+javascript描述：
+```javascript
+// 在b树中分裂一个关键字序列已满的结点
+// parentNode表示已满结点的父结点，i表示父结点指针序列的下标，parentNode.point_i指向已满结点
+BTree.prototype.splitChild = function(parentNode, i){
+    // 需要分裂的结点
+    var currentNode = parentNode.pointList[i];
+    // t表示最大关键字数的一半
+    var t = Math.floor((this.branchNumber - 1) / 2);
+    // 建立一个新结点
+    var newNode = new TreeNode(new Array(), new Array(), t, currentNode.isLeaf);
+    newNode.keyList[0] = newNode.pointList[0] = null;
+    // 复制关键字到新节点上
+    for(var j = 1; j <= t; j++){
+        newNode.keyList[j] = currentNode.keyList[t + j];
+    }
+    // 删除已经复制的元素
+    for(var j = t; j >= 1; j--){
+        currentNode.keyList.pop();
+    }
+
+    // 如果是非叶子结点，则需要复制指针域
+    if(!currentNode.isLeaf){
+        for(var j = 1; j <= t + 1; j++){
+            newNode.pointList[j] = currentNode.pointList[t + 1 + j];
+        }
+        // 删除已经复制的元素
+        for(var j = t + 1; j >= 1; j--){
+            currentNode.pointList.pop();
+        }
+    }
+    // 将新节点插入到当前结点的父结点上
+    for(var j = parentNode.keyNumber + 1; j >= i + 1; j--){
+        parentNode.pointList[j + 1] = parentNode.pointList[j];
+    }
+    parentNode.pointList[j + 1] = newNode;
+
+    // 将关键字插入到父结点上
+    var midKey = currentNode.keyList[t];
+    currentNode.keyList.pop();
+    // currentNode.keyList[t] = null;
+    currentNode.keyNumber = t - 1;
+
+    for(var j = parentNode.keyNumber; j >= i; j--){
+        parentNode.keyList[j + 1] = parentNode.keyList[j];
+    }
+    parentNode.keyList[j + 1] = midKey;
+    parentNode.keyNumber++;
+}
+```
+
+## 往B树中插入关键字
+伪代码：
+```pseudocode
+// T表示B树，k表示需要插入的关键字
+B-TREE-INSERT(T, k):
+    // 从B树的根节点开始往下搜索待插入的位置
+    r = T.root;
+    // 如果根节点的关键字序列已经满，需要进行分裂
+    if r.n == 2t - 1:
+        // 新建一个空白的结点，让它成为根节点r的父结点，即成为B树的根节点
+        s = ALLOCATE-NODE();
+        s.isLeaf = false;
+        s.n = 0;
+        s.point_1 = r;
+        T.root = s;
+        // 分裂已满的结点
+        B-TREE-SPLIT-CHILD(s, 1);
+        // 往已经完成分裂的树中重新插入关键字k
+        B-TREE-INSRET-NONFULL(s, k);
+    // 如果根节点的关键字序列未满，则直接插入在对应位置
+    else:
+        B-TREE-INSERT-NOFULL(r, k);
+```
+
+javascript描述：
+```javascript
+// 插入一个元素
+BTree.prototype.insert = function(key){
+    // 从B树的根节点开始往下搜索关键字的位置
+    var rootNode = this.root;
+    // 如果根节点的关键字序列已满，则需要分裂成两个子结点，然后重置一个根节点
+    if(rootNode.keyNumber == this.branchNumber - 1){
+        // 新建一个结点作为B树的根节点
+        var newNode = new TreeNode(new Array(), new Array(), 0, false);
+        newNode.keyList[0] = newNode.pointList[0] = null;
+        newNode.pointList[1] = rootNode;
+        this.root = newNode;
+        // 分裂已满的结点
+        this.splitChild(newNode, 1);
+        // 往已完成分裂的B树中插入关键字key
+        this.insertNonFull(newNode, key);
+    }
+    else{
+        this.insertNonFull(rootNode, key);
+    }
+}
+```
+
+伪代码描述：
+```pseudocode
+// x表示B树中的一个子结点， k表示待插入的关键字
+B-TREE-INSERT-NONFULL(x, k):
+    i = x.n;
+    // 如果是叶子结点，那么就不需要处理指针域，即它的指针域为空
+    if x.isLeaf:
+        // 结点x的关键字序列中，找到一个最小的i，使得x.key_i >= k
+        while i >= 1 && k < x.key_i:
+            x.key_(i + 1) = x.key_i;
+            i--;
+        x.key_(i+1) = k;
+        x.n = x.n + 1;
+    else:
+        while i >= 1 && k < x.key_i:
+            i--;
+        i++;
+        // 从磁盘中读取x.point_i指向的对象
+        DISK-READ(x.point_i);
+        // 如果该对象的关键字序列已满，则需要分裂
+        if x.point_i.n == 2t - 1:
+            B-TREE-SPLIT-CHILD(x, i);
+            if k > x.key_i:
+                i++;
+        B-TREE-INSERT-NONFULL(x.point_i, k);     
+```
+
+javascript描述：
+```javascript
+// 往子树中插入一个关键字
+BTree.prototype.insertNonFull = function(subRoot, key){
+    var i = subRoot.keyNumber;
+    // 如果是叶子结点，则不需要处理指针域
+    if(subRoot.isLeaf){
+        // 插入到关键字序列
+        while(i >= 1 && subRoot.keyList[i] > key){
+            subRoot.keyList[i + 1] = subRoot.keyList[i]
+            i--;
+        }
+        subRoot.keyList[i + 1] = key;
+        subRoot.keyNumber++;
+    }
+    else{
+        // 找到下一个子结点
+        while(i >= 1 && subRoot.keyList[i] > key){
+            i--;
+        }
+        i++;
+        // 如果已满，则需要分裂
+        if(subRoot.pointList[i].keyNumber == this.branchNumber - 1){
+            this.splitChild(subRoot, i);
+            if(subRoot.keyList[i] < key){
+                i++;
+            }
+        }
+        this.insertNonFull(subRoot.pointList[i], key);
+    }
+}
 ```
