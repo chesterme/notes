@@ -249,27 +249,27 @@ javascript描述：
 BTree.prototype.splitChild = function(parentNode, i){
     // 需要分裂的结点
     var currentNode = parentNode.pointList[i];
-    // t表示最大关键字数的一半
-    var t = Math.floor((this.branchNumber - 1) / 2);
+    // t表示最小分支数
+    var t = this.minBranchNumber;
     // 建立一个新结点
-    var newNode = new TreeNode(new Array(), new Array(), t, currentNode.isLeaf);
+    var newNode = new TreeNode(new Array(), new Array(), t-1, currentNode.isLeaf);
     newNode.keyList[0] = newNode.pointList[0] = null;
     // 复制关键字到新节点上
-    for(var j = 1; j <= t; j++){
+    for(var j = 1; j <= t - 1; j++){
         newNode.keyList[j] = currentNode.keyList[t + j];
     }
     // 删除已经复制的元素
-    for(var j = t; j >= 1; j--){
+    for(var j = t - 1; j >= 1; j--){
         currentNode.keyList.pop();
     }
 
     // 如果是非叶子结点，则需要复制指针域
     if(!currentNode.isLeaf){
-        for(var j = 1; j <= t + 1; j++){
+        for(var j = 1; j <= t; j++){
             newNode.pointList[j] = currentNode.pointList[t + 1 + j];
         }
         // 删除已经复制的元素
-        for(var j = t + 1; j >= 1; j--){
+        for(var j = t; j >= 1; j--){
             currentNode.pointList.pop();
         }
     }
@@ -282,7 +282,6 @@ BTree.prototype.splitChild = function(parentNode, i){
     // 将关键字插入到父结点上
     var midKey = currentNode.keyList[t];
     currentNode.keyList.pop();
-    // currentNode.keyList[t] = null;
     currentNode.keyNumber = t - 1;
 
     for(var j = parentNode.keyNumber; j >= i; j--){
@@ -399,4 +398,495 @@ BTree.prototype.insertNonFull = function(subRoot, key){
         this.insertNonFull(subRoot.pointList[i], key);
     }
 }
+```
+
+## 删除一个元素
+伪代码
+```pesudocode
+// x表示一棵子树的根节点，k表示需要删除的关键字
+B-TREE-DELETE(x, k):
+    // 从当前结点的关键字序列中查找k
+    isFound = false;
+    for i = 1 to x.n:
+        if(x.key[i] == k)
+            isFound = true
+            break;
+    // 如果k在当前结点中
+    if isFound == true:
+        // 如果当前结点时叶子结点，则直接删除
+        if x.isLeaf == true:
+            for j = i to x.n - 1:
+                x.key[j] = x.key[j + 1];
+            x.n--;
+        // 如果是内部结点
+        else:
+            // 关键字k的紧邻前驱，包含小于k的关键字元素
+            y = x.point[i];
+            // 关键字k的紧邻后继，包含大于k的关键字元素
+            z = x.point[i + 1];
+            // 如果k的前驱至少有t个关键字，则将它最大的一个元素上移，替换要删除的关键字k
+            if y.n >= t:
+                max = B-TREE-FINDMAX(y);
+                B-TREE-DELETE(y, max);
+                s.key[i] = max;
+            // 如果k的后继至少包含t个关键字，则将它最小的一个元素上移，替换掉要删除的关键字k
+            else if z.n >= t:
+                min = B-TREE-FINDMIN(z);
+                B-TREE-DELETE(z, min);
+                s.key[i] = min;
+            // 如果k的前驱和后继都只有t-1个关键字，则将前驱、k和后继合并成一个结点，然后在新节点中删除k
+            else if y.n == z.n == t-1:
+                // 合并
+                j = i + 1;
+                y.key[j] = k;
+                for m = 1 to z.n:
+                    y.key[++j] = z.key[m];
+                y.n = y.n + 1 + z.n;
+
+                // 从当前结点中删除k
+                for j = i to x.n - 1:
+                    x.key[j] = x.key[j + 1];
+                for j = i + 1 to x.n:
+                    x.point[j] = x.point[j + 1];
+                x.n--;
+
+                B-TREE-DELETE(y, k);
+
+    // k不在当前结点中
+    else:
+        // 找到一个最小的i，使得x.key[i] > k
+        for i = 1 to x.n:
+            if x.key[i] > k:
+                break;
+
+        // 下一个查找的结点
+        target = x.point[i];
+        // 如果它只有t-1个关键字，若直接删除，则不符合约束，因此它需要向相邻结点借一个关键字，
+        if target.n == t-1:
+            // 目标结点的左兄弟
+            y = x.point[i -1];
+            // 如果左兄弟的关键字数量至少为t，则将它的最大关键字上移至父结点，将父结点的key[i]下移至target结点，然后从target结点中删除k
+            if(y.n >= t){
+                max = B-TREE-FINDMAX(y);
+                B-TREE-DELETE(y, max);
+                
+                // 将父结点的关键字key[i - 1]下降到它的子结点中
+                for j = target.n downto i:
+                    target.key[j + 1] = target.key[j];
+                target.key[j + 1] = x.key[i - 1];
+                target.n++;
+
+                // 更新父结点关键字key[i-1]
+                x.key[i-1] = max;
+                B-TREE-DELETE(target, k);
+            }
+
+            // 目标结点的右兄弟
+            z = x.point[i + 1];
+            // 如果右兄弟的关键字数量至少为t，则将它的最小关键字上移至父结点，将父结点的key[i]下移至target结点，然后从target结点中删除k
+            if(z.n >= t){
+                min = B-TREE-FINDMIN(z);
+                B-TREE-DELETE(z, min);
+
+                // 将父结点的关键字key[i]下降到它的子结点中
+                target.key[target.n + 1] = x.key[i];
+                target.n++;
+
+                // 更新父结点关键字key[i]
+                x.key[i] = min;
+                B-TREE-DELETE(target, k);
+            }
+
+            // 如果目标结点左右兄弟的关键字数量都为t-1，则合并目标结点和左兄弟，然后从新节点中删除k
+            if(y.n == t-1 && z.n == t-1){
+                j = y.n + 1;
+                y.key[j] = x.key[i];
+                for m = 1 to z.n:
+                    y.key[++j] = z.key[m];
+                y.n = y.n + 1 + z.n;
+
+                // 从父结点中删除key[i]
+                for j = i to x.n - 1:
+                    x.key[j] = x.key[j + 1];
+                for j = i to x.n:
+                    x.point[j] = x.point[j + 1];
+                x.n--;
+
+                if(x.n == 0){
+                    T.root = x.point[1];
+                }
+
+                B-TREE-DELETE(y, k);
+            }
+```
+
+JavaScript描述：
+```javascript
+// 从一棵子树中删除一个元素
+BTree.prototype.delete = function(subRoot, k){
+    if(subRoot == null){
+        console.log("子树不能为空");
+        return false;
+    }
+
+    // t表示B树可容纳最小分支数
+    var t = this.minBranchNumber;
+    // 遍历当前结点
+    var isFound = false;
+    var i = null;
+    for(i = 1; i <= subRoot.keyNumber; i++){
+        if(subRoot.keyList[i] == k){
+            isFound = true;
+            break;
+        }
+    }
+
+    // 如果在当前结点内找到k
+    if(isFound){
+        // 如果是叶子结点，则直接从关键字序列中删除k
+        if(subRoot.isLeaf){
+            for(var j = i; j < subRoot.keyNumber; j++){
+                subRoot.keyList[j] = subRoot.keyList[j + 1];
+            }
+            subRoot.keyList.pop();
+            subRoot.keyNumber--;
+
+            return ;
+        }
+
+        // 如果是内部结点
+        else{
+            // y为关键字k的紧邻前驱，包含小于k的关键字元素
+            var y = subRoot.pointList[i];
+            // z为关键字k的紧邻后继，包含大于k的关键字元素
+            var z = subRoot.pointList[i + 1];
+            // 如果k的前驱至少有t个关键字，则将它最大的一个元素上移，替换要删除的关键字k
+            if(y.keyNumber >= t){
+                var max = this.findMax(y);
+                this.delete(y, max);
+                subRoot.keyList[i] = max;
+            }
+            // 如果k的后继至少有t个关键字，则将它最小的一个元素上移，替换要删除的关键字k
+            else if(z.keyNumber >= t){
+                var min = this.findMin(z);
+                this.delete(z, min);
+                subRoot.keyList[i] = min;
+            }
+            // 如果k的前驱和后继都只有t-1个关键字，则将前驱j、关键字k和后继z合并成一个结点，然后在新节点中删除k
+            else if(z.keyNumber == y.keyNumber && z.keyNumber == t-1){
+                // 合并关键字k
+                var j = y.keyNumber + 1;
+                y.keyList[j++] = k;
+                // 合并后继结点z中的关键字
+                for(var m = 1; m <= z.keyNumber; m++){
+                    y.keyList[j++] = z.keyList[m];
+                }
+                y.keyNumber += (1 + z.keyNumber);
+
+                // 从当前结点中删除k，即删除subRoot.keyList[i]
+                for(var j = i; j < subRoot.keyNumber; j++){
+                    subRoot.keyList[j] = subRoot.keyList[j + 1];
+                }
+                subRoot.keyList.pop();
+
+                // 删除关键字k的后继结点，即删除subRoot.pointList[i + 1]
+                for(var j = i + 1; j <= subRoot.keyNumber; j++){
+                    subRoot.pointList[j] = subRoot.pointList[j + 1];
+                }
+                subRoot.pointList.pop();
+
+                // 更新关键字数目
+                subRoot.keyNumber--;
+
+                // 如果当前节点的关键字列表为空，则以它的左儿子作为根节点
+                // if(subRoot.keyNumber == 0){
+                //     this.root = subRoot.pointList[1];
+                // }
+
+                // 从合并的结点中删除k
+                return this.delete(y, k);
+            }
+        }
+    }
+    // 如果在当前结点中没有找到k，即k可能在它的子结点中
+    else{
+        // 找出对应的子结点
+        var m = null;
+        for(m = 1; m <= subRoot.keyNumber; m++){
+            if(subRoot.keyList[m] > k){
+                break;
+            }
+        }
+
+        // 对应的子结点
+        var target = subRoot.pointList[m];
+         // 它的左兄弟
+         var y = subRoot.pointList[m - 1];
+         // 它的右兄弟
+         var z = subRoot.pointList[m + 1];
+        // 如果它只有t-1个关键字，即只含最小数量的关键字，若直接删除，则不符合约束，因此它需要向相邻结点借一个关键字，
+        if(target.keyNumber == t-1){
+            // 如果左兄弟的关键字数量至少为t，即它可以借一个关键字给当前结点
+            // 可以将它的最大关键字上移至父结点，将父结点的key[m - 1]下移至target结点，然后从target结点中删除k
+            if(y != null && y.keyNumber >= t){
+                var max = y.keyList.pop();  
+                // 将父结点的关键字key[i - 1]下移至target结点上
+                var j = null;
+                for(j = target.keyNumber; j >= 1; j--){
+                    target.keyList[j + 1] = target.keyList[j];
+                }
+                target.keyList[1] = subRoot.keyList[m -1];
+                subRoot.keyList[m - 1] = max;
+
+                // 如果y是内部结点，还需要移动指针序列
+                if(!y.isLeaf){
+                    var maxPoint = y.keyList.pop();
+                    for(j = target.keyNumber + 1; j >= 1; j--){
+                        target.pointList[j + 1] = target.pointList[j]; 
+                    }
+                    target.pointList[1] = maxPoint;
+                }
+                y.keyNumber--;
+
+                target.keyNumber++;
+                return this.delete(target, k);
+            }
+            // 如果右兄弟的关键字数量至少为t，即它可以借一个关键字给当前结点
+            // 将它的最小关键字上移至父结点，将父结点的key[m]下移至target结点，然后从target结点中删除k
+            else if(z != null && z.keyNumber >= t){
+                var min = z.keyList[1];
+                var j = null;
+                for(j = 1; j < z.keyNumber; j++){
+                    z.keyList[j] = z.keyList[j + 1];
+                }
+                z.keyList.pop();
+
+                // 将父结点的关键字key[m]下移至target结点上
+                target.keyList.push(subRoot.keyList[m]);
+                subRoot.keyList[m] = min;
+
+                // 如果z是内部结点，还需要移动指针
+                if(!z.isLeaf){
+                    var minPoint = z.pointList[1];
+                    for(j = 1; j <= z.keyNumber; j++){
+                        z.pointList[j] = z.pointList[j + 1];
+                    }
+                    z.pointList.pop();
+                    target.pointList.push(minPoint);
+                }
+                z.keyNumber--;
+
+                target.keyNumber++;
+                return this.delete(target, k);
+            }
+            // 如果相邻结点的关键字数量都是t-1，则将它与其中一个相邻结点合并，然后从新节点中删除k
+            // 子结点只有一个右兄弟结点
+            if(m == 1){
+                // 合并target结点、父结点的keyList[m]、z结点
+                if(z != null && z.keyNumber == t - 1){
+                    // 合并
+                    target.keyList.push(subRoot.keyList[m]);
+                    for(var j = 1; j <= z.keyNumber; j++){
+                        target.keyList.push(z.keyList[j]);
+                    }
+
+                    if(!z.isLeaf){
+                        for(var j = 1; j <= z.keyNumber + 1; j++){
+                            target.pointList.push(z.pointList[j]);
+                        }
+                    }
+                    target.keyNumber += (1 + z.keyNumber);
+
+                    // 从父结点中删除关键字keyList[m]
+                    for(var j = m; j < subRoot.keyNumber; j++){
+                        subRoot.keyList[j] = subRoot.keyList[j + 1];
+                    }
+                    subRoot.keyList.pop();
+
+                    // 从父结点中删除结点z
+                    for(var j = m + 1; j <= subRoot.keyNumber; j++){
+                        subRoot.pointList[j] = subRoot.pointList[j + 1];
+                    }
+                    subRoot.pointList.pop();
+                    subRoot.keyNumber--;
+
+                    if(subRoot.keyNumber == 0){
+                        this.root = subRoot.pointList[1];
+                        subRoot = null;
+                    }
+
+                    // 从合并后的结点中删除k
+                    return this.delete(target, k);
+                }
+            }
+            // 如果子结点在最右侧
+            else if(m == subRoot.keyNumber + 1){
+                // 合并y、父节点的keyList[m]、target结点
+                if(y != null && y.keyNumber == t - 1){
+                    // 合并
+                    y.keyList.push(subRoot.keyList[m - 1]);
+                    for(var j = 1; j <= target.keyNumber; j++){
+                        y.keyList.push(target.keyList[j]);
+                    }
+
+                    if(!target.isLeaf){
+                        for(var j = 1; j <= target.keyNumber + 1; j++){
+                            y.pointList.push(target.pointList[j]);
+                        }
+                    }
+                    y.keyNumber += (1 + target.keyNumber);
+
+                    // 从父结点中删除关键字keyList[m - 1]
+                    for(var j = m - 1; j < subRoot.keyNumber; j++){
+                        subRoot.keyList[j] = subRoot.keyList[j + 1];
+                    }
+                    subRoot.keyList.pop();
+
+                    // 从父结点中删除结点target
+                    for(var j = m; j <= subRoot.keyNumber; j++){
+                        subRoot.pointList[j] = subRoot.pointList[j + 1];
+                    }
+                    subRoot.pointList.pop();
+                    subRoot.keyNumber--;
+
+                    target = y;
+                    if(subRoot.keyNumber == 0){
+                        this.root = subRoot.pointList[1];
+                        subRoot = null;
+                    }
+
+                    // 从合并后的结点中删除k
+                    return this.delete(target, k);
+                }
+            }
+
+            // 如果子节点在中间
+            else if(m > 1 && m <= target.keyNumber){
+                // 合并target结点、父结点的keyList[m]、z结点
+                if(z != null && z.keyNumber == t - 1){
+                    // 合并
+                    target.keyList.push(subRoot.keyList[m]);
+                    for(var j = 1; j <= z.keyNumber; j++){
+                        target.keyList.push(z.keyList[j]);
+                    }
+
+                    if(!z.isLeaf){
+                        for(var j = 1; j <= z.keyNumber + 1; j++){
+                            target.pointList.push(z.pointList[j]);
+                        }
+                    }
+                    target.keyNumber += (1 + z.keyNumber);
+
+                    // 从父结点中删除关键字keyList[m]
+                    for(var j = m; j < subRoot.keyNumber; j++){
+                        subRoot.keyList[j] = subRoot.keyList[j + 1];
+                    }
+                    subRoot.keyList.pop();
+
+                    // 从父结点中删除结点z
+                    for(var j = m + 1; j <= subRoot.keyNumber; j++){
+                        subRoot.pointList[j] = subRoot.pointList[j + 1];
+                    }
+                    subRoot.pointList.pop();
+                    subRoot.keyNumber--;
+
+                    if(subRoot.keyNumber == 0){
+                        this.root = subRoot.pointList[1];
+                        subRoot = null;
+                    }
+
+                    // 从合并后的结点中删除k
+                    return this.delete(target, k);
+                }
+
+                // 合并y、父节点的keyList[m]、target结点
+                else if(y != null && y.keyNumber == t - 1){
+                    // 合并
+                    y.keyList.push(subRoot.keyList[m]);
+                    for(var j = 1; j <= target.keyNumber; j++){
+                        y.keyList.push(target.keyList[j]);
+                    }
+
+                    if(!target.isLeaf){
+                        for(var j = 1; j <= target.keyNumber + 1; j++){
+                            y.pointList.push(target.pointList[j]);
+                        }
+                    }
+                    y.keyNumber += (1 + target.keyNumber);
+
+                    // 从父结点中删除关键字keyList[m]
+                    for(var j = m; j < subRoot.keyNumber; j++){
+                        subRoot.keyList[j] = subRoot.keyList[j + 1];
+                    }
+                    subRoot.keyList.pop();
+
+                    // 从父结点中删除结点target
+                    for(var j = m + 1; j <= subRoot.keyNumber; j++){
+                        subRoot.pointList[j] = subRoot.pointList[j + 1];
+                    }
+                    subRoot.pointList.pop();
+                    subRoot.keyNumber--;
+
+
+                    target = y;
+                    if(subRoot.keyNumber == 0){
+                        this.root = subRoot.pointList[1];
+                        subRoot = null;
+                    }
+
+                    // 从合并后的结点中删除k
+                    return this.delete(target, k);
+                }
+            }
+        }
+        else{
+            return this.delete(target, k);
+        }
+    }
+}
+```
+
+
+## 找出最大的元素
+伪代码：
+```pesudocode
+B-TREE-FINDMAX(x):
+    if x.isLeaf == true:
+        return x.key[x.n];
+    else
+        return B-TREE-FINDMAX(x.point[x.n + 1]);
+```
+
+## 找出最小元素
+伪代码：
+```pesudocode
+B-TREE-FINDMIN(x):
+    if x.isLeaf == true:
+        return x.key[1];
+    else
+        return B-TREE-FINDMIN(x.point[1];)
+```
+
+## 删除最大元素
+伪代码：
+```pesudocode
+B-TREE-DELTEMAX(x):
+    if x.isLeaf == true:
+        x.key.pop();
+        x.n--;
+    else 
+        B-TREE-DELTEMAX(x.point[x.n + 1]);
+```
+
+## 删除最小元素
+伪代码：
+```pesudocode
+B-TREE-DELETEMIN(x):
+    if x.isLeaf == true:
+        for i = 1 to x.n - 1:
+            x.key[i] = x.key[i + 1];
+        x.key[i] = null;
+        x.n--;
+    else:
+        B-TREE-DELETEMIN(x.point[1])
 ```
